@@ -404,7 +404,10 @@ class TransformerEncoder(FairseqEncoder):
         else:
             self.layers = nn.ModuleList([])
         self.layers.extend(
-            [self.build_encoder_layer(args) for i in range(args.encoder_layers)]
+            [
+                self.build_encoder_layer(args, layer_index)
+                for layer_index in range(args.encoder_layers)
+            ]
         )
         self.num_layers = len(self.layers)
 
@@ -413,8 +416,8 @@ class TransformerEncoder(FairseqEncoder):
         else:
             self.layer_norm = None
 
-    def build_encoder_layer(self, args):
-        layer = TransformerEncoderLayer(args)
+    def build_encoder_layer(self, args, layer_index=None):
+        layer = TransformerEncoderLayer(args, layer_index=layer_index)
         checkpoint = getattr(args, "checkpoint_activations", False)
         if checkpoint:
             offload_to_cpu = getattr(args, "offload_activations", False)
@@ -722,8 +725,8 @@ class TransformerDecoder(FairseqIncrementalDecoder):
             self.layers = nn.ModuleList([])
         self.layers.extend(
             [
-                self.build_decoder_layer(args, no_encoder_attn)
-                for _ in range(args.decoder_layers)
+                self.build_decoder_layer(args, no_encoder_attn, layer_index=layer_index)
+                for layer_index in range(args.decoder_layers)
             ]
         )
         self.num_layers = len(self.layers)
@@ -776,8 +779,8 @@ class TransformerDecoder(FairseqIncrementalDecoder):
             self.layers.insert(((i+1) * args.decoder_layers) // (num_base_layers + 1), BaseLayer(args))
 
 
-    def build_decoder_layer(self, args, no_encoder_attn=False):
-        layer = TransformerDecoderLayer(args, no_encoder_attn)
+    def build_decoder_layer(self, args, no_encoder_attn=False, layer_index=None):
+        layer = TransformerDecoderLayer(args, no_encoder_attn, layer_index=layer_index)
         checkpoint = getattr(args, "checkpoint_activations", False)
         if checkpoint:
             offload_to_cpu = getattr(args, "offload_activations", False)

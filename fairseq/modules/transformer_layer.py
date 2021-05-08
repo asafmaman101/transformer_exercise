@@ -29,13 +29,13 @@ class TransformerEncoderLayer(nn.Module):
         args (argparse.Namespace): parsed command-line arguments
     """
 
-    def __init__(self, args):
+    def __init__(self, args, layer_index=None):
         super().__init__()
         self.args = args
         self.embed_dim = args.encoder_embed_dim
         self.quant_noise = getattr(args, 'quant_noise_pq', 0)
         self.quant_noise_block_size = getattr(args, 'quant_noise_pq_block_size', 8) or 8
-        self.self_attn = self.build_self_attention(self.embed_dim, args)
+        self.self_attn = self.build_self_attention(self.embed_dim, args, layer_index=layer_index)
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout_module = FairseqDropout(
             args.dropout, module_name=self.__class__.__name__
@@ -76,7 +76,8 @@ class TransformerEncoderLayer(nn.Module):
             nn.Linear(input_dim, output_dim), p=q_noise, block_size=qn_block_size
         )
 
-    def build_self_attention(self, embed_dim, args):
+    def build_self_attention(self, embed_dim, args, layer_index=None):
+        head_to_mask = args.mask_head if args.mask_layer == layer_index and args.mask_layer_type == 'enc-enc' else None
         return MultiheadAttention(
             embed_dim,
             args.encoder_attention_heads,
@@ -84,6 +85,7 @@ class TransformerEncoderLayer(nn.Module):
             self_attention=True,
             q_noise=self.quant_noise,
             qn_block_size=self.quant_noise_block_size,
+              head_to_mask=head_to_mask
         )
 
     def residual_connection(self, x, residual):
@@ -174,7 +176,7 @@ class TransformerDecoderLayer(nn.Module):
     """
 
     def __init__(
-        self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
+        self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False, layer_index=None
     ):
         super().__init__()
         self.embed_dim = args.decoder_embed_dim
@@ -191,6 +193,7 @@ class TransformerDecoderLayer(nn.Module):
             args,
             add_bias_kv=add_bias_kv,
             add_zero_attn=add_zero_attn,
+            layer_index=layer_index
         )
 
         self.activation_fn = utils.get_activation_fn(
@@ -217,7 +220,7 @@ class TransformerDecoderLayer(nn.Module):
             self.encoder_attn = None
             self.encoder_attn_layer_norm = None
         else:
-            self.encoder_attn = self.build_encoder_attention(self.embed_dim, args)
+            self.encoder_attn = self.build_encoder_attention(self.embed_dim, args, layer_index=layer_index)
             self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=export)
 
         self.fc1 = self.build_fc1(
@@ -245,8 +248,9 @@ class TransformerDecoderLayer(nn.Module):
         return quant_noise(nn.Linear(input_dim, output_dim), q_noise, qn_block_size)
 
     def build_self_attention(
-        self, embed_dim, args, add_bias_kv=False, add_zero_attn=False
+        self, embed_dim, args, add_bias_kv=False, add_zero_attn=False, layer_index=None
     ):
+        head_to_mask = args.mask_head if args.mask_layer == layer_index and args.mask_layer_type == 'dec-dec' else None
         return MultiheadAttention(
             embed_dim,
             args.decoder_attention_heads,
@@ -256,9 +260,11 @@ class TransformerDecoderLayer(nn.Module):
             self_attention=not getattr(args, "cross_self_attention", False),
             q_noise=self.quant_noise,
             qn_block_size=self.quant_noise_block_size,
+            head_to_mask=head_to_mask
         )
 
-    def build_encoder_attention(self, embed_dim, args):
+    def build_encoder_attention(self, embed_dim, args, layer_index):
+        head_to_mask = args.mask_head if args.mask_layer == layer_index and args.mask_layer_type == 'enc-dec' else None
         return MultiheadAttention(
             embed_dim,
             args.decoder_attention_heads,
@@ -268,6 +274,7 @@ class TransformerDecoderLayer(nn.Module):
             encoder_decoder_attention=True,
             q_noise=self.quant_noise,
             qn_block_size=self.quant_noise_block_size,
+            head_to_mask=head_to_mask
         )
 
     def prepare_for_onnx_export_(self):

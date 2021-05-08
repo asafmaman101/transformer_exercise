@@ -37,6 +37,7 @@ class MultiheadAttention(nn.Module):
         encoder_decoder_attention=False,
         q_noise=0.0,
         qn_block_size=8,
+        head_to_mask=None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -45,6 +46,8 @@ class MultiheadAttention(nn.Module):
         self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim
 
         self.num_heads = num_heads
+        self.head_to_mask: int = head_to_mask
+        self.head_masking_vector = self.__create_head_masking_vector()
         self.dropout_module = FairseqDropout(
             dropout, module_name=self.__class__.__name__
         )
@@ -89,6 +92,12 @@ class MultiheadAttention(nn.Module):
         self.onnx_trace = False
 
         self.enable_fairseq_version = True
+
+    def __create_head_masking_vector(self):
+        head_masking_vector = torch.ones(self.num_heads)
+        if self.head_to_mask is not None:
+            head_masking_vector[self.head_to_mask] = 0
+        return head_masking_vector.view(1, -1, 1, 1)
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -369,6 +378,8 @@ class MultiheadAttention(nn.Module):
         assert v is not None
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
+        attn = attn.view(bsz, self.num_heads, tgt_len, self.head_dim) * self.head_masking_vector.to(attn.device)
+        attn = attn.view(bsz * self.num_heads, tgt_len, self.head_dim)
         if self.onnx_trace and attn.size(1) == 1:
             # when ONNX tracing a single decoder step (sequence length == 1)
             # the transpose is a no-op copy before view, thus unnecessary
