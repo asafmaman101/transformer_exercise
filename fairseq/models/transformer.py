@@ -403,12 +403,20 @@ class TransformerEncoder(FairseqEncoder):
             self.layers = LayerDropModuleList(p=self.encoder_layerdrop)
         else:
             self.layers = nn.ModuleList([])
-        self.layers.extend(
-            [
-                self.build_encoder_layer(args, layer_index)
-                for layer_index in range(args.encoder_layers)
-            ]
-        )
+        if not args.enc_layer_configuration:
+            self.layers.extend(
+                [
+                    self.build_encoder_layer(args, layer_index=layer_index)
+                    for layer_index in range(args.encoder_layers)
+                ]
+            )
+        else:
+            self.layers.extend(
+                [
+                    self.build_encoder_layer(args, sublayer_key=sublayer_key)
+                    for sublayer_key in args.enc_layer_configuration
+                ]
+            )
         self.num_layers = len(self.layers)
 
         if args.encoder_normalize_before:
@@ -416,8 +424,11 @@ class TransformerEncoder(FairseqEncoder):
         else:
             self.layer_norm = None
 
-    def build_encoder_layer(self, args, layer_index=None):
-        layer = TransformerEncoderLayer(args, layer_index=layer_index)
+    def build_encoder_layer(self, args, layer_index=None, sublayer_key=None):
+        if not sublayer_key:
+            layer = TransformerEncoderLayer(args, layer_index=layer_index)
+        else:
+            layer = TransformerEncoderLayer(args, sublayer_key=sublayer_key)
         checkpoint = getattr(args, "checkpoint_activations", False)
         if checkpoint:
             offload_to_cpu = getattr(args, "offload_activations", False)
