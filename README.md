@@ -166,8 +166,8 @@ Evaluate your new model with:
 
 ```bash
 python fairseq_cli/generate.py data-bin/iwslt14.tokenized.de-en \
---path sandwich_baseline/checkpoint_best.pt --gen-subset valid \
---batch-size 128 --beam 5 --remove-bpe | tee sandwich_baseline_gen.log
+--path sandwich/checkpoint_best.pt --gen-subset valid \
+--batch-size 128 --beam 5 --remove-bpe | tee sandwich_gen.log
 ```
 Answer yourselves: Did the new architecture improve, hurt, or did not have a significant effect on performance? What about the number of parameters or the training speed? You are welcome to explore with different configurations, or implement (do not submit) this ability for the decoder also if you want.
 
